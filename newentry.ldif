@@ -1,0 +1,7 @@
+dn: cn=Dexter McClary,dc=www,dc=georgiboy,dc=dev
+cn: Dexter McClary
+cn: Dexter
+sn: McClary
+title: test entry
+mail: mccldex@georgiboy.dev
+uid: mccldex
