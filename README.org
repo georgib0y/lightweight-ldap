@@ -1,0 +1,6 @@
+#+title: Lightweight-LDAP
+
+* LLDAP
+** Schema
+The schema component parses the schema specified in some file.
+While adding or searching etc the program references the schema to determine

@@ -12,6 +12,7 @@ use rasn_ldap::{
 };
 
 mod db;
+mod schema;
 
 fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:8000")?;
