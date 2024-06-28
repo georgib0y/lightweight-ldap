@@ -10,6 +10,10 @@ pub struct LdapEntry {
     attributes: Vec<Attribute>,
 }
 
+impl LdapEntry {
+    fn new(dn: &str) -> LdapEntry {}
+}
+
 pub trait LdapRepo {
     fn get(&self, dn: &str) -> Option<&LdapEntry>;
     fn save(&mut self, entry: LdapEntry) -> Option<LdapEntry>;

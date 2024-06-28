@@ -1,47 +1,49 @@
-use std::collections::HashMap;
+pub struct Schema {
+    object_classes: Vec<ObjectClass>,
+    attributes: Vec<Attribute>
+}
 
-type OID = String;
-type NOIDLen = String;
-type Extensions = HashMap<String, Vec<String>>;
+pub struct ObjectClass {
+    numericoid: String,
+    names: Vec<String>,
+    desc: String,
+    obsolete: bool,
+    sup_oids: Vec<String>,
+    kind: Kind,
+    must_attrs: Vec<String>,
+    may_attrs: Vec<String>
+}
 
-enum Kind {
+pub enum Kind {
     Abstract,
     Structural,
-    Auxiliary,
+    Auxiliary
 }
 
-struct ObjectClassSchema {
-    oid: OID,
-    names: Vec<String>,
-    desc: Option<String>,
+pub struct Attribute {
+    numericoid: String,
+    name: String,
+    desc: String,
     obsolete: bool,
-    sups: Vec<OID>,
-    kind: Option<Kind>,
-    required_atts: Vec<OID>,
-    optional_atts: Vec<OID>,
-    extensions: Extensions,
-}
-
-enum Usage {
-    UserApplications,
-    DirectoryOperation,
-    DistributedOperation,
-    DSAOperation,
-}
-
-struct AttributeSchema {
-    oid: OID,
-    names: Vec<String>,
-    desc: Option<String>,
-    obsolete: bool,
-    sups: Option<OID>,
-    equality: Option<OID>,
-    ordering: Option<OID>,
-    substr: Option<OID>,
-    syntax: Option<NOIDLen>,
+    sup_oids: Vec<String>,
+    equality_rule: EqualityRule,
+    ordering_rule: OrderingRule,
+    substr_rule: SubstringRule,
+    syntax: String,
     single_value: bool,
     collective: bool,
-    modifiable: bool,
-    usage: Option<Usage>,
-    extensions: Extensions,
+    no_user_modification: bool,
+    usage: Usage,
+    extensions: String,
+}
+
+pub enum EqualityRule {}
+pub enum OrderingRule {}
+pub enum SubstringRule {}
+
+pub enum Usage {
+    UserApplications,
+    DirectoryOperations,
+    DistributedOperation,
+    DSAOperatoin
 }
