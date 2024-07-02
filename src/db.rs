@@ -1,42 +1,47 @@
 use std::collections::HashMap;
 
-pub struct Attribute {
-    key: String,
-    val: String,
-}
-
 pub struct LdapEntry {
-    dn: String,
-    attributes: Vec<Attribute>,
+    id: Stirng,
+    parent: String,
+    children: Vec<String>,
+    rdn: String,
+    attributes: HashMap<String, Vec<String>>,
 }
 
 impl LdapEntry {
-    fn new(dn: &str) -> LdapEntry {}
+    pub fn new(rdn: String, attributes: HashMap<String, Vec<String>>) -> LdapEntry {
+        LdapEntry { rdn, attributes }
+    }
 }
 
 pub trait LdapRepo {
     fn get(&self, dn: &str) -> Option<&LdapEntry>;
     fn save(&mut self, entry: LdapEntry) -> Option<LdapEntry>;
+    fn dn_parent_exists(&self, dn: &str) -> bool;
 }
 
-pub struct MemLdapDb {
-    entries: HashMap<String, LdapEntry>,
+pub struct InMemLdapDb {
+    entries: Vec<LdapEntry>,
 }
 
-impl MemLdapDb {
-    pub fn new() -> MemLdapDb {
-        MemLdapDb {
-            entries: HashMap::new(),
+impl InMemLdapDb {
+    pub fn new() -> InMemLdapDb {
+        InMemLdapDb {
+            entries: Vec::new(),
         }
     }
 }
 
-impl LdapRepo for MemLdapDb {
+impl LdapRepo for InMemLdapDb {
     fn get(&self, dn: &str) -> Option<&LdapEntry> {
         self.entries.get(dn)
     }
 
-    fn save(&mut self, entry: LdapEntry) -> Option<LdapEntry> {
-        self.entries.insert(entry.dn.clone(), entry)
+    fn save(&mut self, dn: String, entry: LdapEntry) -> Option<LdapEntry> {
+        self.entries.insert(, entry)
+    }
+
+    fn dn_parent_exists(&self, dn: &str) -> bool {
+        todo!()
     }
 }
