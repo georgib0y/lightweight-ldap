@@ -16,6 +16,12 @@ pub struct LdapControllerImpl<'a, E: EntryService> {
     entry_service: &'a E,
 }
 
+impl<'a, E: EntryService> LdapControllerImpl<'a, E> {
+    pub fn new(entry_service: &'a E) -> Self {
+        Self { entry_service }
+    }
+}
+
 impl<'a, E: EntryService> LdapController for LdapControllerImpl<'a, E> {
     fn handle_bind_request(&self, req: &BindRequest) -> Result<ProtocolOp> {
         Ok(ProtocolOp::BindResponse(BindResponse::new(

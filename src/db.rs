@@ -3,8 +3,9 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::anyhow;
 use bytes::Bytes;
+use rasn::types::ObjectIdentifier;
 
-use crate::entity::{Entry, DN};
+use crate::entity::{Attribute, Entry, ObjectClass, DN};
 
 pub trait EntryRepository {
     fn find_by_dn(&self, dn: &DN) -> Option<Entry>;
@@ -37,5 +38,35 @@ impl EntryRepository for InMemLdapDb {
 
     fn dn_parent_exists(&self, dn: &DN) -> bool {
         todo!()
+    }
+}
+
+pub trait SchemaRepo {
+    fn find_object_class_by_name(&self, name: &str) -> Option<&ObjectClass>;
+    fn find_attribute_by_name(&self, name: &str) -> Option<&Attribute>;
+}
+
+#[derive(Debug, Default)]
+pub struct InMemSchemaDb {
+    object_classes: Vec<ObjectClass>,
+    attributes: Vec<Attribute>,
+}
+
+impl InMemSchemaDb {
+    pub fn new(object_classes: Vec<ObjectClass>, attributes: Vec<Attribute>) -> InMemSchemaDb {
+        InMemSchemaDb {
+            object_classes,
+            attributes,
+        }
+    }
+}
+
+impl SchemaRepo for InMemSchemaDb {
+    fn find_object_class_by_name(&self, name: &str) -> Option<&ObjectClass> {
+        self.object_classes.iter().find(|o| o.has_name(name))
+    }
+
+    fn find_attribute_by_name(&self, name: &str) -> Option<&Attribute> {
+        self.attributes.iter().find(|a| a.has_name(name))
     }
 }
