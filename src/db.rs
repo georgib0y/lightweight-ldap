@@ -1,27 +1,19 @@
-use std::collections::HashMap;
+#![allow(unused)]
+use std::collections::{HashMap, HashSet};
 
-pub struct LdapEntry {
-    id: Stirng,
-    parent: String,
-    children: Vec<String>,
-    rdn: String,
-    attributes: HashMap<String, Vec<String>>,
-}
+use anyhow::anyhow;
+use bytes::Bytes;
 
-impl LdapEntry {
-    pub fn new(rdn: String, attributes: HashMap<String, Vec<String>>) -> LdapEntry {
-        LdapEntry { rdn, attributes }
-    }
-}
+use crate::entity::{Entry, DN};
 
-pub trait LdapRepo {
-    fn get(&self, dn: &str) -> Option<&LdapEntry>;
-    fn save(&mut self, entry: LdapEntry) -> Option<LdapEntry>;
-    fn dn_parent_exists(&self, dn: &str) -> bool;
+pub trait EntryRepository {
+    fn find_by_dn(&self, dn: &DN) -> Option<Entry>;
+    fn save(&mut self, dn: &DN, entry: Entry) -> Entry;
+    fn dn_parent_exists(&self, dn: &DN) -> bool;
 }
 
 pub struct InMemLdapDb {
-    entries: Vec<LdapEntry>,
+    entries: Vec<Entry>,
 }
 
 impl InMemLdapDb {
@@ -32,16 +24,18 @@ impl InMemLdapDb {
     }
 }
 
-impl LdapRepo for InMemLdapDb {
-    fn get(&self, dn: &str) -> Option<&LdapEntry> {
-        self.entries.get(dn)
+impl EntryRepository for InMemLdapDb {
+    fn find_by_dn(&self, dn: &DN) -> Option<Entry> {
+        // self.entries.get(dn).clone()
+        todo!()
     }
 
-    fn save(&mut self, dn: String, entry: LdapEntry) -> Option<LdapEntry> {
-        self.entries.insert(, entry)
+    fn save(&mut self, dn: &DN, entry: Entry) -> Entry {
+        // self.entries.insert(, entry)
+        todo!()
     }
 
-    fn dn_parent_exists(&self, dn: &str) -> bool {
+    fn dn_parent_exists(&self, dn: &DN) -> bool {
         todo!()
     }
 }
