@@ -1,43 +1,80 @@
-use std::collections::{HashMap, HashSet};
+#![allow(unused)]
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::{Debug, Display},
+    hash::Hash,
+    vec::IntoIter,
+};
 
 use anyhow::Result;
 
 use crate::errors::LdapError;
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct Oid(String);
+
+impl Oid {
+    pub fn new<S: Into<String>>(oid: S) -> Oid {
+        Oid(oid.into())
+    }
+}
+
+impl<T: Into<String>> From<T> for Oid {
+    fn from(value: T) -> Self {
+        Oid(value.into())
+    }
+}
+
+impl Display for Oid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.to_string())
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct ObjectClass {
-    numericoid: String,
-    names: Vec<String>,
+    numericoid: Oid,
+    names: HashSet<String>,
     desc: String,
     obsolete: bool,
-    sup_oids: Vec<String>,
+    sup_oids: HashSet<Oid>,
     kind: Kind,
-    must_attrs: Vec<String>,
-    may_attrs: Vec<String>,
+    must_attrs: HashSet<Oid>,
+    may_attrs: HashSet<Oid>,
+}
+
+impl PartialEq for ObjectClass {
+    fn eq(&self, other: &Self) -> bool {
+        self.numericoid == other.numericoid
+    }
 }
 
 impl ObjectClass {
-    pub fn get_names(&self) -> &Vec<String> {
+    pub fn get_numericoid(&self) -> &Oid {
+        &self.numericoid
+    }
+
+    pub fn get_names(&self) -> &HashSet<String> {
         &self.names
     }
 
     pub fn add_name(&mut self, name: &str) {
-        self.names.push(name.into())
+        self.names.insert(name.into());
     }
 
     pub fn has_name(&self, name: &str) -> bool {
-        self.names.iter().any(|n| n == name)
+        self.names.contains(name)
     }
 
     pub fn is_structural(&self) -> bool {
         self.kind.is_structural()
     }
 
-    pub fn get_must_attrs(&self) -> &Vec<String> {
+    pub fn get_must_attrs(&self) -> &HashSet<Oid> {
         &self.must_attrs
     }
 
-    pub fn get_may_attrs(&self) -> &Vec<String> {
+    pub fn get_may_attrs(&self) -> &HashSet<Oid> {
         &self.may_attrs
     }
 }
@@ -53,13 +90,13 @@ impl ObjectClassBuilder {
         }
     }
 
-    pub fn set_numericoid(mut self, numericoid: &str) -> Self {
-        self.obj_class.numericoid = numericoid.into();
+    pub fn set_numericoid(mut self, numericoid: Oid) -> Self {
+        self.obj_class.numericoid = numericoid;
         self
     }
 
     pub fn add_name(mut self, name: &str) -> Self {
-        self.obj_class.names.push(name.into());
+        self.obj_class.names.insert(name.into());
         self
     }
 
@@ -73,8 +110,8 @@ impl ObjectClassBuilder {
         self
     }
 
-    pub fn add_sup_oid(mut self, sup_oid: &str) -> Self {
-        self.obj_class.sup_oids.push(sup_oid.into());
+    pub fn add_sup_oid(mut self, sup_oid: Oid) -> Self {
+        self.obj_class.sup_oids.insert(sup_oid);
         self
     }
 
@@ -83,13 +120,13 @@ impl ObjectClassBuilder {
         self
     }
 
-    pub fn add_must_attr(mut self, must_attr: &str) -> Self {
-        self.obj_class.must_attrs.push(must_attr.into());
+    pub fn add_must_attr(mut self, must_attr: Oid) -> Self {
+        self.obj_class.must_attrs.insert(must_attr);
         self
     }
 
-    pub fn add_may_attr(mut self, may_attr: &str) -> Self {
-        self.obj_class.may_attrs.push(may_attr.into());
+    pub fn add_may_attr(mut self, may_attr: Oid) -> Self {
+        self.obj_class.may_attrs.insert(may_attr);
         self
     }
 
@@ -119,11 +156,11 @@ impl Default for Kind {
 
 #[derive(Debug, Default, Clone)]
 pub struct Attribute {
-    numericoid: String,
-    names: Vec<String>,
+    numericoid: Oid,
+    names: HashSet<String>,
     desc: String,
     obsolete: bool,
-    sup_oids: Vec<String>,
+    sup_oids: HashSet<Oid>,
     equality_rule: EqualityRule,
     ordering_rule: OrderingRule,
     substr_rule: SubstringRule,
@@ -135,26 +172,31 @@ pub struct Attribute {
     extensions: String,
 }
 
+impl PartialEq for Attribute {
+    fn eq(&self, other: &Self) -> bool {
+        self.numericoid == other.numericoid
+    }
+}
+
 impl Attribute {
-    pub fn get_names(&self) -> &Vec<String> {
+    pub fn get_numericoid(&self) -> &Oid {
+        &self.numericoid
+    }
+
+    pub fn get_names(&self) -> &HashSet<String> {
         &self.names
     }
 
-    pub fn has_name(&self, name: &str) -> bool {
-        self.names.iter().any(|n| n == name)
+    pub fn contains_name(&self, name: &str) -> bool {
+        self.names.contains(name)
     }
 
-    pub fn validate_values(&self, required: bool, values: Vec<&str>) -> Result<()> {
-        todo!()
-        // if required && values.is_empty() {
-        //     bail!("values is empty")
-        // }
+    pub fn has_name(&self, name: &str) -> bool {
+        self.names.contains(name)
+    }
 
-        // if self.single_value && values.len() > 1 {
-        //     bail!("multiple values set for a single value attribute")
-        // }
-
-        // Ok(())
+    pub fn is_single(&self) -> bool {
+        self.single_value
     }
 }
 
@@ -169,13 +211,13 @@ impl AttributeBuilder {
         }
     }
 
-    pub fn set_numericoid(mut self, numericoid: &str) -> Self {
-        self.attribute.numericoid = numericoid.into();
+    pub fn set_numericoid(mut self, numericoid: Oid) -> Self {
+        self.attribute.numericoid = numericoid;
         self
     }
 
     pub fn add_name(mut self, name: &str) -> Self {
-        self.attribute.names.push(name.into());
+        self.attribute.names.insert(name.into());
         self
     }
 
@@ -189,8 +231,8 @@ impl AttributeBuilder {
         self
     }
 
-    pub fn add_sup_oid(mut self, sup_oid: &str) -> Self {
-        self.attribute.sup_oids.push(sup_oid.into());
+    pub fn add_sup_oid(mut self, sup_oid: Oid) -> Self {
+        self.attribute.sup_oids.insert(sup_oid);
         self
     }
 
@@ -286,86 +328,120 @@ impl Default for Usage {
     }
 }
 
-pub struct RDN {
-    attr: String,
-    value: String,
-}
+#[derive(Debug, Default, Clone)]
+pub struct Rdn(Vec<(Oid, String)>);
 
-impl RDN {
-    pub fn new(attr: &str, value: &str) -> RDN {
-        RDN {
-            attr: attr.into(),
-            value: value.into(),
-        }
+impl From<Vec<(Oid, String)>> for Rdn {
+    fn from(value: Vec<(Oid, String)>) -> Self {
+        Rdn(value)
     }
 }
 
-impl<'a> TryFrom<&'a str> for RDN {
-    type Error = anyhow::Error;
+impl<'a> TryFrom<&'a str> for Rdn {
+    type Error = LdapError;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let Some((attr, value)) = value.split_once('=') else {
-            anyhow::bail!("could not get attr/val for rdn: {}", value)
-        };
+        let mut rdn = Vec::new();
+        for val in value.split('+') {
+            let Some((a, v)) = val.split_once('=') else {
+                Err(LdapError::InvalidDN { dn: value.into() })?
+            };
 
-        Ok(RDN {
-            attr: attr.into(),
-            value: value.into(),
-        })
+            rdn.push((a.into(), v.into()));
+        }
+
+        Ok(Rdn(rdn))
+    }
+}
+
+impl<'a> IntoIterator for &'a Rdn {
+    type Item = &'a (Oid, String);
+
+    type IntoIter = std::slice::Iter<'a, (Oid, String)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
     }
 }
 
 pub struct DN {
-    rdns: Vec<Vec<RDN>>,
+    rdns: Vec<Rdn>,
 }
 
-impl<'a> TryFrom<&'a str> for DN {
-    type Error = LdapError;
+impl DN {
+    pub fn new(rdns: Vec<Rdn>) -> DN {
+        DN { rdns }
+    }
 
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let mut rdns = Vec::new();
+    pub fn first(&self) -> Option<&Rdn> {
+        self.rdns.first()
+    }
 
-        for seg_str in value.split(',') {
-            let mut seg = Vec::new();
-            for rdn in seg_str.split('+') {
-                let Some((a, v)) = rdn.split_once('=') else {
-                    Err(LdapError::InvalidDN { dn: value.into() })?
-                };
-
-                seg.push(RDN::new(a, v));
-            }
-            rdns.push(seg);
+    pub fn parent_dn(&self) -> DN {
+        DN {
+            rdns: self.rdns.into_iter().skip(1).collect(),
         }
-
-        Ok(DN { rdns })
     }
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct Entry {
-    _id: String,
-    parent: String,
-    children: Vec<String>,
-    attributes: HashMap<String, HashSet<String>>,
+impl<'a> IntoIterator for &'a DN {
+    type Item = &'a Rdn;
+    type IntoIter = std::slice::Iter<'a, Rdn>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.rdns.iter()
+    }
 }
 
-impl Entry {
-    pub fn new(attributes: HashMap<String, HashSet<String>>) -> Entry {
+pub trait EntryId: Debug + Display + Default + Clone + Eq + Hash {
+    fn new_random() -> Self;
+    fn root_identifier() -> Self;
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct Entry<ID: EntryId> {
+    _id: Option<ID>,
+    parent: String,
+    children: Vec<String>,
+    object_classes: HashSet<Oid>,
+    attributes: HashMap<Oid, HashSet<String>>,
+}
+
+impl<ID: EntryId> Entry<ID> {
+    pub fn new(
+        object_classes: HashSet<Oid>,
+        attributes: HashMap<Oid, HashSet<String>>,
+    ) -> Entry<ID> {
         Entry {
+            object_classes,
             attributes,
             ..Default::default()
         }
     }
 
-    pub fn get_id(&self) -> &str {
-        self._id.as_ref()
+    pub fn get_id(&self) -> Option<ID> {
+        self._id.to_owned()
     }
 
-    pub fn get_attributes(&self) -> &HashMap<String, HashSet<String>> {
+    pub fn set_id(&mut self, id: &ID) {
+        self._id = Some(id.to_owned());
+    }
+
+    pub fn get_object_classes(&self) -> &HashSet<Oid> {
+        &self.object_classes
+    }
+
+    pub fn get_attributes(&self) -> &HashMap<Oid, HashSet<String>> {
         &self.attributes
     }
 
-    pub fn get_attribute(&self, attr_name: &str) -> Option<&HashSet<String>> {
-        self.attributes.get(attr_name)
+    pub fn get_attribute(&self, oid: &Oid) -> Option<&HashSet<String>> {
+        self.attributes.get(oid)
+    }
+
+    pub fn matches_rdn(&self, rdn: &Rdn) -> bool {
+        for (oid, val) in rdn {}
+
+        true
     }
 }

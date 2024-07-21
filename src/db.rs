@@ -1,59 +1,116 @@
 #![allow(unused)]
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    hash::Hash,
+};
 
 use anyhow::anyhow;
 use bytes::Bytes;
+use rand::prelude::*;
 use rasn::types::ObjectIdentifier;
 
-use crate::entity::{Attribute, Entry, ObjectClass, DN};
+use crate::entity::{Attribute, Entry, EntryId, ObjectClass, Oid, DN};
 
-pub trait EntryRepository {
-    fn find_by_dn(&self, dn: &DN) -> Option<Entry>;
-    fn save(&mut self, dn: &DN, entry: Entry) -> Entry;
-    fn dn_parent_exists(&self, dn: &DN) -> bool;
+const ROOT_ID_U64: u64 = 0;
+
+impl EntryId for u64 {
+    fn new_random() -> Self {
+        rand::random()
+    }
+
+    fn root_identifier() -> Self {
+        ROOT_ID_U64
+    }
 }
 
-pub struct InMemLdapDb {
-    entries: Vec<Entry>,
+impl EntryId for String {
+    fn new_random() -> Self {
+        (0..10).fold(String::new(), |acc, _| {
+            format!("{}{}", acc, rand::random::<char>())
+        })
+    }
+
+    fn root_identifier() -> Self {
+        "root".into()
+    }
 }
 
-impl InMemLdapDb {
-    pub fn new() -> InMemLdapDb {
+pub trait EntryRepository<ID: EntryId> {
+    fn get_root_entry(&self) -> Entry<ID>;
+    fn get_by_id(&self, id: &ID) -> Option<Entry<ID>>;
+    fn save(&mut self, entry: Entry<ID>) -> Entry<ID>;
+}
+
+pub struct InMemLdapDb<ID: EntryId> {
+    entries: HashMap<ID, Entry<ID>>,
+}
+
+impl<ID: EntryId> InMemLdapDb<ID> {
+    pub fn new() -> InMemLdapDb<ID> {
         InMemLdapDb {
-            entries: Vec::new(),
+            entries: HashMap::new(),
         }
     }
 }
 
-impl EntryRepository for InMemLdapDb {
-    fn find_by_dn(&self, dn: &DN) -> Option<Entry> {
-        // self.entries.get(dn).clone()
-        todo!()
+impl<ID: EntryId> EntryRepository<ID> for InMemLdapDb<ID> {
+    fn save(&mut self, mut entry: Entry<ID>) -> Entry<ID> {
+        let id = entry.get_id().unwrap_or_else(|| {
+            let id = ID::new_random();
+            entry.set_id(id);
+            id
+        });
+
+        self.entries.insert(id, entry).unwrap()
     }
 
-    fn save(&mut self, dn: &DN, entry: Entry) -> Entry {
-        // self.entries.insert(, entry)
-        todo!()
+    fn get_by_id(&self, id: &ID) -> Option<Entry<ID>> {
+        self.entries.get(id).map(|e| e.clone())
     }
 
-    fn dn_parent_exists(&self, dn: &DN) -> bool {
-        todo!()
+    fn get_root_entry(&self) -> Entry<ID> {
+        self.entries
+            .entry(ID::root_identifier())
+            .or_insert_with(|| {
+                let mut root = Entry::<ID>::default();
+                root.set_id(&ID::root_identifier());
+                root
+            })
+            .clone()
     }
 }
 
 pub trait SchemaRepo {
+    fn get_object_class(&self, oid: &Oid) -> Option<&ObjectClass>;
+    fn get_entry_object_classes(&self, entry: &Entry<impl EntryId>) -> Option<Vec<&ObjectClass>>;
+
+    fn get_attribute(&self, oid: &Oid) -> Option<&Attribute>;
+    fn get_attributes<'a>(&self, oids: impl Iterator<Item = &'a Oid>) -> Option<Vec<&Attribute>>;
+
     fn find_object_class_by_name(&self, name: &str) -> Option<&ObjectClass>;
     fn find_attribute_by_name(&self, name: &str) -> Option<&Attribute>;
+    fn find_object_class_attrs(
+        &self,
+        obj_class: &ObjectClass,
+    ) -> Option<(Vec<&Attribute>, Vec<&Attribute>)>;
+    fn find_all_attributes_by_name<'a>(
+        &self,
+        names: impl Iterator<Item = &'a str>,
+    ) -> Option<Vec<&Attribute>>;
 }
 
 #[derive(Debug, Default)]
 pub struct InMemSchemaDb {
-    object_classes: Vec<ObjectClass>,
-    attributes: Vec<Attribute>,
+    object_classes: HashMap<Oid, ObjectClass>,
+    attributes: HashMap<Oid, Attribute>,
 }
 
 impl InMemSchemaDb {
-    pub fn new(object_classes: Vec<ObjectClass>, attributes: Vec<Attribute>) -> InMemSchemaDb {
+    pub fn new(
+        object_classes: HashMap<Oid, ObjectClass>,
+        attributes: HashMap<Oid, Attribute>,
+    ) -> InMemSchemaDb {
         InMemSchemaDb {
             object_classes,
             attributes,
@@ -63,10 +120,49 @@ impl InMemSchemaDb {
 
 impl SchemaRepo for InMemSchemaDb {
     fn find_object_class_by_name(&self, name: &str) -> Option<&ObjectClass> {
-        self.object_classes.iter().find(|o| o.has_name(name))
+        self.object_classes.values().find(|o| o.has_name(name))
     }
 
     fn find_attribute_by_name(&self, name: &str) -> Option<&Attribute> {
-        self.attributes.iter().find(|a| a.has_name(name))
+        self.attributes.values().find(|a| a.has_name(name))
+    }
+
+    fn find_object_class_attrs(
+        &self,
+        obj_class: &ObjectClass,
+    ) -> Option<(Vec<&Attribute>, Vec<&Attribute>)> {
+        let must_attrs = self.find_all_attributes_by_name(obj_class.get_must_attrs().iter())?;
+
+        let may_attrs =
+            self.find_all_attributes_by_name(obj_class.get_may_attrs().iter().map(String::as_str))?;
+
+        Some((must_attrs, may_attrs))
+    }
+
+    fn find_all_attributes_by_name<'a>(
+        &self,
+        names: impl Iterator<Item = &'a str>,
+    ) -> Option<Vec<&Attribute>> {
+        names.map(|a| self.find_attribute_by_name(a)).collect()
+    }
+
+    fn get_object_class(&self, oid: &Oid) -> Option<&ObjectClass> {
+        self.object_classes.get(oid)
+    }
+
+    fn get_attribute(&self, oid: &Oid) -> Option<&Attribute> {
+        self.attributes.get(oid)
+    }
+
+    fn get_entry_object_classes(&self, entry: &Entry<impl EntryId>) -> Option<Vec<&ObjectClass>> {
+        entry
+            .get_object_classes()
+            .iter()
+            .map(|oid| self.get_object_class(oid))
+            .collect()
+    }
+
+    fn get_attributes<'a>(&self, oids: impl Iterator<Item = &'a Oid>) -> Option<Vec<&Attribute>> {
+        oids.map(|oid| self.get_attribute(oid)).collect()
     }
 }

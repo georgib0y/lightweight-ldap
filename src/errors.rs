@@ -16,30 +16,40 @@ pub enum LdapError {
     EntryDoesNotExists { dn: String },
     #[error("Entry {id} has invalid state: {msg}")]
     InvalidEntry { id: String, msg: String },
+    #[error("Schema is invalid: {0}")]
+    InvalidSchema(String),
+    #[error("Could not find attribute: {0}")]
+    UnknownAttribute(String),
 }
 
 impl TryFrom<LdapError> for LdapResult {
     type Error = anyhow::Error;
 
     fn try_from(value: LdapError) -> Result<Self, Self::Error> {
-        match value {
-            LdapError::InvalidAddRequest { name, msg } => {
-                Ok(LdapResult::new(ResultCode::ProtocolError, name, msg.into()))
-            }
-
+        match &value {
+            LdapError::InvalidAddRequest { name, msg } => Ok(LdapResult::new(
+                ResultCode::ProtocolError,
+                name.clone(),
+                Bytes::from(msg.clone()),
+            )),
             LdapError::InvalidDN { dn } => Ok(LdapResult::new(
                 ResultCode::InvalidDnSyntax,
-                dn.into(),
+                Bytes::from(dn.clone()),
                 value.to_string().into(),
             )),
             LdapError::EntryAlreadyExists { dn } => Ok(LdapResult::new(
                 ResultCode::EntryAlreadyExists,
-                dn.into(),
+                Bytes::from(dn.clone()),
                 value.to_string().into(),
             )),
             LdapError::EntryDoesNotExists { dn } => Ok(LdapResult::new(
                 ResultCode::NoSuchObject,
-                dn.into(),
+                Bytes::from(dn.clone()),
+                value.to_string().into(),
+            )),
+            LdapError::UnknownAttribute(attr) => Ok(LdapResult::new(
+                ResultCode::UndefinedAttributeType,
+                Bytes::new(),
                 value.to_string().into(),
             )),
             _ => Err(value)?,

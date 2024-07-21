@@ -44,7 +44,7 @@ impl<'a, E: EntryService> LdapController for LdapControllerImpl<'a, E> {
         };
 
         match self.entry_service.add_entry(command) {
-            Ok(entry) => Ok(ProtocolOp::AddResponse(AddResponse(LdapResult::new(
+            Ok(_) => Ok(ProtocolOp::AddResponse(AddResponse(LdapResult::new(
                 ResultCode::Success,
                 req.entry.to_owned(),
                 "Created new entry".into(),
@@ -55,7 +55,7 @@ impl<'a, E: EntryService> LdapController for LdapControllerImpl<'a, E> {
         }
     }
 
-    fn handle_search_request(&self, req: &SearchRequest) -> Result<ProtocolOp> {
+    fn handle_search_request(&self, _req: &SearchRequest) -> Result<ProtocolOp> {
         todo!();
     }
 }

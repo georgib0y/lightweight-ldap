@@ -1,14 +1,9 @@
-use std::collections::{HashMap, HashSet};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 
 use anyhow::Result;
 use controller::LdapControllerImpl;
-use db::{DistinguishedName, EntryRepository, InMemLdapDb, InMemSchemaDb};
+use db::{InMemLdapDb, InMemSchemaDb};
 use infrastructure::LdapTcpConnection;
-use rasn_ldap::{
-    AddRequest, AddResponse, Attribute, BindRequest, BindResponse, LdapMessage, LdapResult,
-    ProtocolOp, ResultCode, SearchRequest, UnbindRequest,
-};
 use service::{EntryServiceImpl, SchemaServiceImpl};
 
 mod commands;
@@ -24,12 +19,12 @@ fn main() -> Result<()> {
 
     let (stream, _) = listener.accept()?;
 
-    let entry_repo = InMemLdapDb::new();
+    let entry_repo: InMemLdapDb<u64> = InMemLdapDb::new();
     let schema_repo = InMemSchemaDb::default();
     let schema_service = SchemaServiceImpl::new(&schema_repo);
     let entry_service = EntryServiceImpl::new(&schema_service, &entry_repo);
     let controller = LdapControllerImpl::new(&entry_service);
-    let mut conn = LdapTcpConnection::new(stream, &controller);
+    let mut conn = LdapTcpConnection::new(stream, &controller)?;
 
     conn.run()
 }
