@@ -90,8 +90,8 @@ impl ObjectClassBuilder {
         }
     }
 
-    pub fn set_numericoid(mut self, numericoid: Oid) -> Self {
-        self.obj_class.numericoid = numericoid;
+    pub fn set_numericoid(mut self, numericoid: &Oid) -> Self {
+        self.obj_class.numericoid = numericoid.clone();
         self
     }
 
@@ -211,8 +211,8 @@ impl AttributeBuilder {
         }
     }
 
-    pub fn set_numericoid(mut self, numericoid: Oid) -> Self {
-        self.attribute.numericoid = numericoid;
+    pub fn set_numericoid(mut self, numericoid: &Oid) -> Self {
+        self.attribute.numericoid = numericoid.clone();
         self
     }
 
@@ -379,7 +379,7 @@ impl DN {
 
     pub fn parent_dn(&self) -> DN {
         DN {
-            rdns: self.rdns.into_iter().skip(1).collect(),
+            rdns: self.rdns.iter().map(|rdn| rdn.to_owned()).skip(1).collect(),
         }
     }
 }
@@ -421,6 +421,13 @@ impl<ID: EntryId> Entry<ID> {
 
     pub fn get_id(&self) -> Option<ID> {
         self._id.to_owned()
+    }
+
+    pub fn get_id_str(&self) -> String {
+        self._id
+            .as_ref()
+            .map(|id| id.to_string())
+            .unwrap_or("No ID".to_string())
     }
 
     pub fn set_id(&mut self, id: &ID) {

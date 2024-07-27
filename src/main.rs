@@ -19,7 +19,7 @@ fn main() -> Result<()> {
 
     let (stream, _) = listener.accept()?;
 
-    let entry_repo: InMemLdapDb<u64> = InMemLdapDb::new();
+    let entry_repo = InMemLdapDb::<u64>::new();
     let schema_repo = InMemSchemaDb::default();
     let schema_service = SchemaServiceImpl::new(&schema_repo);
     let entry_service = EntryServiceImpl::new(&schema_service, &entry_repo);

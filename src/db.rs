@@ -1,8 +1,11 @@
 #![allow(unused)]
 use std::{
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
+    rc::Rc,
+    sync::{Arc, Mutex},
 };
 
 use anyhow::anyhow;
@@ -47,36 +50,34 @@ pub struct InMemLdapDb<ID: EntryId> {
 }
 
 impl<ID: EntryId> InMemLdapDb<ID> {
-    pub fn new() -> InMemLdapDb<ID> {
-        InMemLdapDb {
+    pub fn new() -> Arc<Mutex<InMemLdapDb<ID>>> {
+        Arc::new(Mutex::new(InMemLdapDb {
             entries: HashMap::new(),
-        }
+        }))
     }
 }
 
-impl<ID: EntryId> EntryRepository<ID> for InMemLdapDb<ID> {
+impl<ID: EntryId> EntryRepository<ID> for Arc<Mutex<InMemLdapDb<ID>>> {
     fn save(&mut self, mut entry: Entry<ID>) -> Entry<ID> {
         let id = entry.get_id().unwrap_or_else(|| {
             let id = ID::new_random();
-            entry.set_id(id);
+            entry.set_id(&id);
             id
         });
 
-        self.entries.insert(id, entry).unwrap()
+        self.lock().unwrap().entries.insert(id, entry).unwrap()
     }
 
     fn get_by_id(&self, id: &ID) -> Option<Entry<ID>> {
-        self.entries.get(id).map(|e| e.clone())
+        self.lock().unwrap().entries.get(id).map(|e| e.clone())
     }
 
     fn get_root_entry(&self) -> Entry<ID> {
-        self.entries
+        self.lock()
+            .unwrap()
+            .entries
             .entry(ID::root_identifier())
-            .or_insert_with(|| {
-                let mut root = Entry::<ID>::default();
-                root.set_id(&ID::root_identifier());
-                root
-            })
+            .or_insert(Entry::default())
             .clone()
     }
 }
@@ -131,10 +132,17 @@ impl SchemaRepo for InMemSchemaDb {
         &self,
         obj_class: &ObjectClass,
     ) -> Option<(Vec<&Attribute>, Vec<&Attribute>)> {
-        let must_attrs = self.find_all_attributes_by_name(obj_class.get_must_attrs().iter())?;
+        let must_attrs = obj_class
+            .get_must_attrs()
+            .iter()
+            .map(|a| self.get_attribute(a))
+            .collect::<Option<Vec<_>>>()?;
 
-        let may_attrs =
-            self.find_all_attributes_by_name(obj_class.get_may_attrs().iter().map(String::as_str))?;
+        let may_attrs = obj_class
+            .get_may_attrs()
+            .iter()
+            .map(|a| self.get_attribute(a))
+            .collect::<Option<Vec<_>>>()?;
 
         Some((must_attrs, may_attrs))
     }

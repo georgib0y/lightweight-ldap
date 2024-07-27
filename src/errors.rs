@@ -20,6 +20,8 @@ pub enum LdapError {
     InvalidSchema(String),
     #[error("Could not find attribute: {0}")]
     UnknownAttribute(String),
+    #[error("Could not find object class: {0}")]
+    UnknownObjectClass(String),
 }
 
 impl TryFrom<LdapError> for LdapResult {
@@ -47,7 +49,12 @@ impl TryFrom<LdapError> for LdapResult {
                 Bytes::from(dn.clone()),
                 value.to_string().into(),
             )),
-            LdapError::UnknownAttribute(attr) => Ok(LdapResult::new(
+            LdapError::UnknownAttribute(_) => Ok(LdapResult::new(
+                ResultCode::UndefinedAttributeType,
+                Bytes::new(),
+                value.to_string().into(),
+            )),
+            LdapError::UnknownObjectClass(_) => Ok(LdapResult::new(
                 ResultCode::UndefinedAttributeType,
                 Bytes::new(),
                 value.to_string().into(),

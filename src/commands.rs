@@ -4,9 +4,11 @@ use rasn_ldap::AddRequest;
 
 use crate::errors::LdapError;
 
+pub type AddEntryAttributes = HashMap<String, HashSet<String>>;
+
 pub struct AddEntryCommand {
     pub dn: String,
-    pub attributes: HashMap<String, HashSet<String>>,
+    pub attributes: AddEntryAttributes,
 }
 
 impl TryFrom<&AddRequest> for AddEntryCommand {
@@ -20,7 +22,7 @@ impl TryFrom<&AddRequest> for AddEntryCommand {
             }
         })?;
 
-        let mut attributes: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut attributes: AddEntryAttributes = HashMap::new();
 
         for attr in value.attributes.iter() {
             let name = String::from_utf8(attr.r#type.to_owned().into()).map_err(|_| {
