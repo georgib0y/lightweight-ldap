@@ -13,12 +13,13 @@ use bytes::Bytes;
 use rand::prelude::*;
 use rasn::types::ObjectIdentifier;
 
-use crate::entity::{Attribute, Entry, EntryId, ObjectClass, Oid, DN};
+use crate::entity::entry::{Entry, EntryId};
+use crate::entity::schema::{Attribute, ObjectClass, Oid};
 
 const ROOT_ID_U64: u64 = 0;
 
 impl EntryId for u64 {
-    fn new_random() -> Self {
+    fn new_random_id() -> Self {
         rand::random()
     }
 
@@ -28,7 +29,7 @@ impl EntryId for u64 {
 }
 
 impl EntryId for String {
-    fn new_random() -> Self {
+    fn new_random_id() -> Self {
         (0..10).fold(String::new(), |acc, _| {
             format!("{}{}", acc, rand::random::<char>())
         })
@@ -55,12 +56,20 @@ impl<ID: EntryId> InMemLdapDb<ID> {
             entries: HashMap::new(),
         }))
     }
+
+    pub fn with_entries(
+        entries_iter: impl Iterator<Item = Entry<ID>>,
+    ) -> Arc<Mutex<InMemLdapDb<ID>>> {
+        let mut entries = HashMap::new();
+        entries.extend(entries_iter.map(|e| (e.get_id().unwrap(), e)));
+        Arc::new(Mutex::new(InMemLdapDb { entries }))
+    }
 }
 
 impl<ID: EntryId> EntryRepository<ID> for Arc<Mutex<InMemLdapDb<ID>>> {
     fn save(&mut self, mut entry: Entry<ID>) -> Entry<ID> {
         let id = entry.get_id().unwrap_or_else(|| {
-            let id = ID::new_random();
+            let id = ID::new_random_id();
             entry.set_id(&id);
             id
         });
@@ -69,7 +78,7 @@ impl<ID: EntryId> EntryRepository<ID> for Arc<Mutex<InMemLdapDb<ID>>> {
     }
 
     fn get_by_id(&self, id: &ID) -> Option<Entry<ID>> {
-        self.lock().unwrap().entries.get(id).map(|e| e.clone())
+        self.lock().unwrap().entries.get(id).cloned()
     }
 
     fn get_root_entry(&self) -> Entry<ID> {
@@ -77,7 +86,7 @@ impl<ID: EntryId> EntryRepository<ID> for Arc<Mutex<InMemLdapDb<ID>>> {
             .unwrap()
             .entries
             .entry(ID::root_identifier())
-            .or_insert(Entry::default())
+            .or_default()
             .clone()
     }
 }

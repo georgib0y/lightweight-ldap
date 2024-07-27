@@ -1,14 +1,6 @@
 #![allow(unused)]
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::{Debug, Display},
-    hash::Hash,
-    vec::IntoIter,
-};
 
-use anyhow::Result;
-
-use crate::errors::LdapError;
+use std::{collections::HashSet, fmt::Display};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Oid(String);
@@ -27,7 +19,7 @@ impl<T: Into<String>> From<T> for Oid {
 
 impl Display for Oid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.to_string())
+        write!(f, "{}", self.0)
     }
 }
 
@@ -90,8 +82,8 @@ impl ObjectClassBuilder {
         }
     }
 
-    pub fn set_numericoid(mut self, numericoid: &Oid) -> Self {
-        self.obj_class.numericoid = numericoid.clone();
+    pub fn set_numericoid(mut self, numericoid: impl Into<Oid>) -> Self {
+        self.obj_class.numericoid = numericoid.into();
         self
     }
 
@@ -110,8 +102,8 @@ impl ObjectClassBuilder {
         self
     }
 
-    pub fn add_sup_oid(mut self, sup_oid: Oid) -> Self {
-        self.obj_class.sup_oids.insert(sup_oid);
+    pub fn add_sup_oid(mut self, sup_oid: impl Into<Oid>) -> Self {
+        self.obj_class.sup_oids.insert(sup_oid.into());
         self
     }
 
@@ -120,13 +112,13 @@ impl ObjectClassBuilder {
         self
     }
 
-    pub fn add_must_attr(mut self, must_attr: Oid) -> Self {
-        self.obj_class.must_attrs.insert(must_attr);
+    pub fn add_must_attr(mut self, must_attr: impl Into<Oid>) -> Self {
+        self.obj_class.must_attrs.insert(must_attr.into());
         self
     }
 
-    pub fn add_may_attr(mut self, may_attr: Oid) -> Self {
-        self.obj_class.may_attrs.insert(may_attr);
+    pub fn add_may_attr(mut self, may_attr: impl Into<Oid>) -> Self {
+        self.obj_class.may_attrs.insert(may_attr.into());
         self
     }
 
@@ -211,8 +203,8 @@ impl AttributeBuilder {
         }
     }
 
-    pub fn set_numericoid(mut self, numericoid: &Oid) -> Self {
-        self.attribute.numericoid = numericoid.clone();
+    pub fn set_numericoid(mut self, numericoid: impl Into<Oid>) -> Self {
+        self.attribute.numericoid = numericoid.into();
         self
     }
 
@@ -231,8 +223,8 @@ impl AttributeBuilder {
         self
     }
 
-    pub fn add_sup_oid(mut self, sup_oid: Oid) -> Self {
-        self.attribute.sup_oids.insert(sup_oid);
+    pub fn add_sup_oid(mut self, sup_oid: impl Into<Oid>) -> Self {
+        self.attribute.sup_oids.insert(sup_oid.into());
         self
     }
 
@@ -325,130 +317,5 @@ pub enum Usage {
 impl Default for Usage {
     fn default() -> Self {
         Self::UserApplications
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct Rdn(Vec<(Oid, String)>);
-
-impl From<Vec<(Oid, String)>> for Rdn {
-    fn from(value: Vec<(Oid, String)>) -> Self {
-        Rdn(value)
-    }
-}
-
-impl<'a> TryFrom<&'a str> for Rdn {
-    type Error = LdapError;
-
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let mut rdn = Vec::new();
-        for val in value.split('+') {
-            let Some((a, v)) = val.split_once('=') else {
-                Err(LdapError::InvalidDN { dn: value.into() })?
-            };
-
-            rdn.push((a.into(), v.into()));
-        }
-
-        Ok(Rdn(rdn))
-    }
-}
-
-impl<'a> IntoIterator for &'a Rdn {
-    type Item = &'a (Oid, String);
-
-    type IntoIter = std::slice::Iter<'a, (Oid, String)>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.iter()
-    }
-}
-
-pub struct DN {
-    rdns: Vec<Rdn>,
-}
-
-impl DN {
-    pub fn new(rdns: Vec<Rdn>) -> DN {
-        DN { rdns }
-    }
-
-    pub fn first(&self) -> Option<&Rdn> {
-        self.rdns.first()
-    }
-
-    pub fn parent_dn(&self) -> DN {
-        DN {
-            rdns: self.rdns.iter().map(|rdn| rdn.to_owned()).skip(1).collect(),
-        }
-    }
-}
-
-impl<'a> IntoIterator for &'a DN {
-    type Item = &'a Rdn;
-    type IntoIter = std::slice::Iter<'a, Rdn>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.rdns.iter()
-    }
-}
-
-pub trait EntryId: Debug + Display + Default + Clone + Eq + Hash {
-    fn new_random() -> Self;
-    fn root_identifier() -> Self;
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct Entry<ID: EntryId> {
-    _id: Option<ID>,
-    parent: String,
-    children: Vec<String>,
-    object_classes: HashSet<Oid>,
-    attributes: HashMap<Oid, HashSet<String>>,
-}
-
-impl<ID: EntryId> Entry<ID> {
-    pub fn new(
-        object_classes: HashSet<Oid>,
-        attributes: HashMap<Oid, HashSet<String>>,
-    ) -> Entry<ID> {
-        Entry {
-            object_classes,
-            attributes,
-            ..Default::default()
-        }
-    }
-
-    pub fn get_id(&self) -> Option<ID> {
-        self._id.to_owned()
-    }
-
-    pub fn get_id_str(&self) -> String {
-        self._id
-            .as_ref()
-            .map(|id| id.to_string())
-            .unwrap_or("No ID".to_string())
-    }
-
-    pub fn set_id(&mut self, id: &ID) {
-        self._id = Some(id.to_owned());
-    }
-
-    pub fn get_object_classes(&self) -> &HashSet<Oid> {
-        &self.object_classes
-    }
-
-    pub fn get_attributes(&self) -> &HashMap<Oid, HashSet<String>> {
-        &self.attributes
-    }
-
-    pub fn get_attribute(&self, oid: &Oid) -> Option<&HashSet<String>> {
-        self.attributes.get(oid)
-    }
-
-    pub fn matches_rdn(&self, rdn: &Rdn) -> bool {
-        for (oid, val) in rdn {}
-
-        true
     }
 }

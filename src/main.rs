@@ -4,7 +4,7 @@ use anyhow::Result;
 use controller::LdapControllerImpl;
 use db::{InMemLdapDb, InMemSchemaDb};
 use infrastructure::LdapTcpConnection;
-use service::{EntryServiceImpl, SchemaServiceImpl};
+use service::{entry::EntryServiceImpl, schema::SchemaServiceImpl};
 
 mod commands;
 mod controller;

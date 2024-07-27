@@ -1,93 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    marker::PhantomData,
-};
+use std::collections::{HashMap, HashSet};
 
 use crate::{
-    commands::{AddEntryAttributes, AddEntryCommand},
-    db::{EntryRepository, SchemaRepo},
-    entity::{Attribute, Entry, EntryId, ObjectClass, Oid, Rdn, DN},
+    commands::AddEntryAttributes,
+    db::SchemaRepo,
+    entity::{
+        dn::{Rdn, DN},
+        entry::{Entry, EntryId},
+        schema::{Attribute, ObjectClass, Oid},
+    },
     errors::LdapError,
 };
-
-pub trait EntryService {
-    fn add_entry(&self, command: AddEntryCommand) -> Result<Entry<impl EntryId>, LdapError>;
-    fn find_by_dn(&self, dn: &DN) -> Result<Option<Entry<impl EntryId>>, LdapError>;
-}
-
-pub struct EntryServiceImpl<'a, ID, S, R>
-where
-    ID: EntryId,
-    S: SchemaService,
-    R: EntryRepository<ID>,
-{
-    schema_service: &'a S,
-    entry_repo: &'a R,
-    _entry_id_type: PhantomData<ID>,
-}
-
-impl<'a, ID, S, R> EntryServiceImpl<'a, ID, S, R>
-where
-    ID: EntryId,
-    S: SchemaService,
-    R: EntryRepository<ID>,
-{
-    pub fn new(schema_service: &'a S, entry_repo: &'a R) -> Self {
-        Self {
-            schema_service,
-            entry_repo,
-            _entry_id_type: PhantomData,
-        }
-    }
-}
-
-impl<'a, ID, S, R> EntryService for EntryServiceImpl<'a, ID, S, R>
-where
-    ID: EntryId,
-    S: SchemaService,
-    R: EntryRepository<ID>,
-{
-    fn add_entry(&self, command: AddEntryCommand) -> Result<Entry<ID>, LdapError> {
-        let dn = self.schema_service.create_normalised_dn(&command.dn)?;
-
-        if self.find_by_dn(&dn)?.is_some() {
-            return Err(LdapError::EntryAlreadyExists { dn: command.dn });
-        }
-
-        if self.find_by_dn(&dn.parent_dn())?.is_none() {
-            return Err(LdapError::EntryDoesNotExists { dn: command.dn });
-        }
-
-        let entry_object_classes = self
-            .schema_service
-            .get_normalised_obj_classes(&command.attributes)?;
-
-        let entry_attributes = self
-            .schema_service
-            .get_normalised_attributes(&command.attributes)?;
-
-        let entry = Entry::new(entry_object_classes, entry_attributes);
-        self.schema_service.validate_entry(&entry)?;
-        Ok(entry)
-    }
-
-    fn find_by_dn(&self, dn: &DN) -> Result<Option<Entry<ID>>, LdapError> {
-        let mut curr_entry = Some(self.entry_repo.get_root_entry());
-
-        // TODO this assumes that the root entry and the end of the DN is the same
-        // (might not be true)
-
-        for rdn in dn.into_iter().rev().skip(1) {
-            // if the entry could not be found
-            if curr_entry.is_none() {
-                return Ok(None);
-            }
-        }
-
-        todo!();
-        Ok(curr_entry)
-    }
-}
 
 pub trait SchemaService {
     fn create_normalised_dn(&self, dn: &str) -> Result<DN, LdapError>;
@@ -127,29 +49,6 @@ impl<'a, R: SchemaRepo> SchemaServiceImpl<'a, R> {
         Ok(())
     }
 
-    fn validate_entry_missing_attrs(
-        &self,
-        entry: &Entry<impl EntryId>,
-        must_attrs: &[&Attribute],
-    ) -> Result<(), LdapError> {
-        // check all entry contains all must attrs
-        let missing_must = must_attrs
-            .iter()
-            .find(|a| entry.get_attribute(a.get_numericoid()).is_none());
-
-        if let Some(missing) = missing_must {
-            return Err(LdapError::InvalidEntry {
-                id: entry.get_id_str(),
-                msg: format!(
-                    "Entry does not contain '{}' must attr",
-                    missing.get_numericoid()
-                ),
-            });
-        }
-
-        Ok(())
-    }
-
     fn validate_entry_attributes(
         &self,
         entry: &Entry<impl EntryId>,
@@ -171,7 +70,7 @@ impl<'a, R: SchemaRepo> SchemaServiceImpl<'a, R> {
                 .get_attribute(must)
                 .ok_or(LdapError::InvalidSchema(must.to_string()))?;
 
-            self.validate_entry_attribute(entry, &attribute, true, values)?;
+            self.validate_entry_attribute(entry, attribute, true, values)?;
 
             e_attrs.remove(must);
         }
@@ -320,39 +219,43 @@ impl<'a, R: SchemaRepo> SchemaService for SchemaServiceImpl<'a, R> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     use crate::{
         db::InMemSchemaDb,
-        entity::{AttributeBuilder, Entry, Kind, ObjectClassBuilder, Oid},
-        service::{SchemaService, SchemaServiceImpl},
+        entity::entry::Entry,
+        entity::{
+            entry::EntryBuilder,
+            schema::{AttributeBuilder, Kind, ObjectClassBuilder, Oid},
+        },
+        service::schema::{SchemaService, SchemaServiceImpl},
     };
 
     #[test]
     fn test_validate_schema() {
         let p_oid: Oid = "person-oid".into();
         let person_class = ObjectClassBuilder::new()
-            .set_numericoid(&p_oid)
+            .set_numericoid(p_oid.clone())
             .add_name("person")
             .set_kind(Kind::Structural)
-            .add_must_attr("cn-oid".into())
-            .add_must_attr("sn-oid".into())
-            .add_may_attr("upw-oid".into())
+            .add_must_attr("cn-oid")
+            .add_must_attr("sn-oid")
+            .add_may_attr("upw-oid")
             .build();
 
         let cn_oid: Oid = "cn-oid".into();
         let cn_attr = AttributeBuilder::new()
-            .set_numericoid(&cn_oid)
+            .set_numericoid(cn_oid.clone())
             .add_name("cn")
             .build();
         let sn_oid: Oid = "sn-oid".into();
         let sn_attr = AttributeBuilder::new()
-            .set_numericoid(&sn_oid)
+            .set_numericoid(sn_oid.clone())
             .add_name("sn")
             .build();
         let upw_oid: Oid = "upw-oid".into();
         let user_pw_attr = AttributeBuilder::new()
-            .set_numericoid(&upw_oid)
+            .set_numericoid(upw_oid.clone())
             .add_name("userPassword")
             .build();
 
@@ -369,36 +272,32 @@ mod tests {
             schema_repo: &schema_db,
         };
 
-        let entry_all_attrs: Entry<String> = Entry::new(
-            HashSet::from([p_oid.clone()]),
-            HashMap::from([
-                ("cn-oid".into(), HashSet::from(["My Name".into()])),
-                ("sn-oid".into(), HashSet::from(["Name".into()])),
-                ("upw-oid".into(), HashSet::from(["password123".into()])),
-            ]),
-        );
+        let entry_all_attrs: Entry<String> = EntryBuilder::new()
+            .add_object_class(p_oid.clone())
+            .add_attr_val("cn-oid", "My Name")
+            .add_attr_val("sn-oid", "Name")
+            .add_attr_val("upw-oid", "password123")
+            .build();
 
         schema_service.validate_entry(&entry_all_attrs).unwrap();
 
-        let no_entry: Entry<String> = Entry::new(HashSet::new(), HashMap::new());
+        let no_entry: Entry<String> = EntryBuilder::new().build();
+
         schema_service.validate_entry(&no_entry).unwrap_err();
 
-        let entry_must_attrs: Entry<String> = Entry::new(
-            HashSet::from([p_oid.clone()]),
-            HashMap::from([
-                ("cn-oid".into(), HashSet::from(["My Name".into()])),
-                ("sn-oid".into(), HashSet::from(["Name".into()])),
-            ]),
-        );
+        let entry_must_attrs: Entry<String> = EntryBuilder::new()
+            .add_object_class(p_oid.clone())
+            .add_attr_val("cn-oid", "My Name")
+            .add_attr_val("sn-oid", "Name")
+            .build();
+
         schema_service.validate_entry(&entry_must_attrs).unwrap();
 
-        let entry_missing_must_attr: Entry<String> = Entry::new(
-            HashSet::from([p_oid.clone()]),
-            HashMap::from([
-                ("cn-oid".into(), HashSet::from(["My Name".into()])),
-                ("upw-oid".into(), HashSet::from(["password123".into()])),
-            ]),
-        );
+        let entry_missing_must_attr: Entry<String> = EntryBuilder::new()
+            .add_object_class(p_oid)
+            .add_attr_val("cn-oid", "My Name")
+            .add_attr_val("upw-oid", "password123")
+            .build();
 
         schema_service
             .validate_entry(&entry_missing_must_attr)

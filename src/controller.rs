@@ -1,4 +1,4 @@
-use crate::{commands::AddEntryCommand, service::EntryService};
+use crate::{commands::AddEntryCommand, service::entry::EntryService};
 
 use anyhow::Result;
 use rasn_ldap::{
