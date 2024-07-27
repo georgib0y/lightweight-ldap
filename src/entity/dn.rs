@@ -1,5 +1,3 @@
-use crate::errors::LdapError;
-
 use super::schema::Oid;
 
 #[derive(Debug, Default, Clone)]
@@ -14,23 +12,6 @@ impl From<Vec<(Oid, String)>> for Rdn {
 impl From<(Oid, String)> for Rdn {
     fn from(value: (Oid, String)) -> Self {
         Rdn(vec![value])
-    }
-}
-
-impl<'a> TryFrom<&'a str> for Rdn {
-    type Error = LdapError;
-
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let mut rdn = Vec::new();
-        for val in value.split('+') {
-            let Some((a, v)) = val.split_once('=') else {
-                Err(LdapError::InvalidDN { dn: value.into() })?
-            };
-
-            rdn.push((a.into(), v.into()));
-        }
-
-        Ok(Rdn(rdn))
     }
 }
 

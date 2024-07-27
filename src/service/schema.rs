@@ -138,7 +138,7 @@ impl<'a, R: SchemaRepo> SchemaServiceImpl<'a, R> {
                 .schema_repo
                 .find_attribute_by_name(att)
                 .map(|a| a.get_numericoid())
-                .ok_or(rdn_str)?;
+                .ok_or(format!("Could not find attribute {} for {}", att, rdn_str))?;
             rdn.push((oid.clone(), val.into()))
         }
 
@@ -173,7 +173,10 @@ impl<'a, R: SchemaRepo> SchemaService for SchemaServiceImpl<'a, R> {
             .map(|rdn| self.create_normalised_rdn(rdn))
             .collect::<Result<Vec<_>, String>>()
             .map(DN::new)
-            .map_err(|_| LdapError::InvalidDN { dn: dn_str.into() })
+            .map_err(|msg| LdapError::InvalidDN {
+                dn: dn_str.into(),
+                msg,
+            })
     }
 
     fn get_normalised_obj_classes(
@@ -205,6 +208,10 @@ impl<'a, R: SchemaRepo> SchemaService for SchemaServiceImpl<'a, R> {
         let mut attrs = HashMap::new();
 
         for (a, v) in attributes {
+            if a == "objectClass" {
+                continue;
+            }
+
             let attr = self
                 .schema_repo
                 .find_attribute_by_name(a)
@@ -303,4 +310,7 @@ mod tests {
             .validate_entry(&entry_missing_must_attr)
             .unwrap_err();
     }
+
+    #[test]
+    fn test_create_normalised_dn() {}
 }

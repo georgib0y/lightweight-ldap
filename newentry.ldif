@@ -1,7 +1,5 @@
-dn: cn=Dexter McClary,dc=www,dc=georgiboy,dc=dev
+dn: cn=Dexter McClary,dc=georgiboy,dc=dev
+objectClass: person
 cn: Dexter McClary
-cn: Dexter
+commonName: Dexter
 sn: McClary
-title: test entry
-mail: mccldex@georgiboy.dev
-uid: mccldex

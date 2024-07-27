@@ -8,8 +8,8 @@ pub enum LdapError {
     InvalidAddRequest { name: Bytes, msg: String },
     #[error("Cannot convert this error to protocol op")]
     CantConvertoToProtocolOp,
-    #[error("Invalid DN: {dn}")]
-    InvalidDN { dn: String },
+    #[error("Invalid DN {dn}: {msg}")]
+    InvalidDN { dn: String, msg: String },
     #[error("Entry already exists at {dn}")]
     EntryAlreadyExists { dn: String },
     #[error("Entry does not exist at {dn}")]
@@ -34,7 +34,7 @@ impl TryFrom<LdapError> for LdapResult {
                 name.clone(),
                 Bytes::from(msg.clone()),
             )),
-            LdapError::InvalidDN { dn } => Ok(LdapResult::new(
+            LdapError::InvalidDN { dn, .. } => Ok(LdapResult::new(
                 ResultCode::InvalidDnSyntax,
                 Bytes::from(dn.clone()),
                 value.to_string().into(),

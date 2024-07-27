@@ -118,12 +118,18 @@ pub struct InMemSchemaDb {
 
 impl InMemSchemaDb {
     pub fn new(
-        object_classes: HashMap<Oid, ObjectClass>,
-        attributes: HashMap<Oid, Attribute>,
+        object_classes: impl Iterator<Item = ObjectClass>,
+        attributes: impl Iterator<Item = Attribute>,
     ) -> InMemSchemaDb {
+        let mut oc_map = HashMap::new();
+        let mut attr_map = HashMap::new();
+
+        oc_map.extend(object_classes.map(|o| (o.get_numericoid().clone(), o)));
+        attr_map.extend(attributes.map(|a| (a.get_numericoid().clone(), a)));
+
         InMemSchemaDb {
-            object_classes,
-            attributes,
+            object_classes: oc_map,
+            attributes: attr_map,
         }
     }
 }
