@@ -53,6 +53,10 @@ impl<ID: EntryId> Entry<ID> {
         &self.children
     }
 
+    pub fn add_child(&mut self, child_id: ID) {
+        self.children.insert(child_id);
+    }
+
     pub fn matches_rdn(&self, rdn: &Rdn) -> bool {
         for (oid, val) in rdn {
             let Some(attr) = self.get_attribute(oid) else {

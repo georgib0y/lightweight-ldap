@@ -6,8 +6,8 @@ use thiserror::Error;
 pub enum LdapError {
     #[error("Invalid Add Request: {msg:?}")]
     InvalidAddRequest { name: Bytes, msg: String },
-    #[error("Cannot convert this error to protocol op")]
-    CantConvertoToProtocolOp,
+    #[error("An unknown error occured: {0}")]
+    UnknownError(String),
     #[error("Invalid DN {dn}: {msg}")]
     InvalidDN { dn: String, msg: String },
     #[error("Entry already exists at {dn}")]

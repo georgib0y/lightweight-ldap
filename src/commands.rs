@@ -49,3 +49,16 @@ impl TryFrom<&AddRequest> for AddEntryCommand {
         Ok(AddEntryCommand { dn, attributes })
     }
 }
+
+pub struct SearchCommand {
+    base_object: String,
+    scope: SearchCommandScope,
+    size_lim: usize,
+    time_lim: usize,
+}
+
+pub enum SearchCommandScope {
+    BaseObject,
+    SingleLevel,
+    WholeSubtree,
+}

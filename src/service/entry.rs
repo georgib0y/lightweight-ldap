@@ -12,9 +12,21 @@ use crate::{
 
 use super::schema::SchemaService;
 
+pub enum FindDnResult<ID: EntryId> {
+    Found(Entry<ID>),
+    NotFound(DN),
+}
+
+impl<ID: EntryId> FindDnResult<ID> {
+    pub fn is_found(&self) -> bool {
+        matches!(self, FindDnResult::Found(_))
+    }
+}
+
 pub trait EntryService {
     fn add_entry(&self, command: AddEntryCommand) -> Result<Entry<impl EntryId>, LdapError>;
-    fn find_by_dn(&self, dn: &DN) -> Result<Option<Entry<impl EntryId>>, LdapError>;
+    fn find_by_dn(&self, dn: &DN) -> Result<FindDnResult<impl EntryId>, LdapError>;
+    fn get_entry_dn(&self, entry: &Entry<impl EntryId>) -> Result<DN, LdapError>;
 }
 
 pub struct EntryServiceImpl<'a, ID, S, R>
@@ -46,23 +58,25 @@ where
         &self,
         curr_entry: Entry<ID>,
         rdns: &[Rdn],
-    ) -> Result<Option<Entry<ID>>, LdapError> {
+    ) -> Result<FindDnResult<ID>, LdapError> {
         if rdns.len() == 1 {
             return if curr_entry.matches_rdn(rdns.first().unwrap()) {
-                Ok(Some(curr_entry))
+                Ok(FindDnResult::Found(curr_entry))
             } else {
-                Ok(None)
+                Ok(FindDnResult::NotFound(DN::default()))
             };
         }
 
         // check if current entry matches the last rdn in the slice
         let curr_rdn = rdns.last().unwrap();
         if !curr_entry.matches_rdn(curr_rdn) {
-            return Ok(None);
+            return Ok(FindDnResult::NotFound(DN::default()));
         }
 
         // if so, try to find the entry recursively for each child
         let next_slice = &rdns[..rdns.len() - 1];
+
+        let mut res: Option<FindDnResult<ID>> = None;
 
         for child_id in curr_entry.get_children() {
             let child = self
@@ -73,13 +87,19 @@ where
                     msg: format!("Entry has supposed child {} but could not find", child_id),
                 })?;
 
-            let res = self.find_dn_recursive(child, next_slice)?;
-            if res.is_some() {
-                return Ok(res);
+            res = Some(self.find_dn_recursive(child, next_slice)?);
+            if matches!(res, Some(FindDnResult::Found(_))) {
+                return Ok(res.unwrap());
             }
         }
 
-        Ok(None)
+        let FindDnResult::NotFound(mut dn) = res.unwrap_or(FindDnResult::NotFound(DN::default()))
+        else {
+            panic!("find dn result somehow found after search")
+        };
+        dn.append(rdns.last().unwrap().clone());
+
+        Ok(FindDnResult::NotFound(dn))
     }
 }
 
@@ -92,13 +112,18 @@ where
     fn add_entry(&self, command: AddEntryCommand) -> Result<Entry<ID>, LdapError> {
         let dn = self.schema_service.create_normalised_dn(&command.dn)?;
 
-        if self.find_by_dn(&dn)?.is_some() {
+        if self.find_by_dn(&dn)?.is_found() {
             return Err(LdapError::EntryAlreadyExists { dn: command.dn });
         }
 
-        if self.find_by_dn(&dn.parent_dn())?.is_none() {
-            return Err(LdapError::EntryDoesNotExists { dn: command.dn });
-        }
+        let mut parent = match self.find_by_dn(&dn.parent_dn())? {
+            FindDnResult::Found(parent) => parent,
+            FindDnResult::NotFound(not_found_dn) => {
+                return Err(LdapError::EntryDoesNotExists {
+                    dn: not_found_dn.to_string(),
+                })
+            }
+        };
 
         let entry_object_classes = self
             .schema_service
@@ -113,17 +138,34 @@ where
             builder = builder.add_object_class(oid);
         }
 
+        // add the attributes from the rdn to the entry as per the specs
+        for (oid, val) in dn.first().unwrap() {
+            builder = builder.add_attr_val(oid.clone(), val)
+        }
+
         for (oid, val) in entry_attributes {
             builder = builder.add_attr_vals(oid, val.into_iter())
         }
 
+        builder = builder.set_parent(parent.get_id().unwrap());
+
         let entry = builder.build();
         self.schema_service.validate_entry(&entry)?;
+
+        let entry = self.entry_repo.save(entry)?;
+
+        parent.add_child(entry.get_id().unwrap());
+        self.entry_repo.save(parent)?;
+
         Ok(entry)
     }
 
-    fn find_by_dn(&self, dn: &DN) -> Result<Option<Entry<ID>>, LdapError> {
+    fn find_by_dn(&self, dn: &DN) -> Result<FindDnResult<ID>, LdapError> {
         self.find_dn_recursive(self.entry_repo.get_root_entry(), dn.as_slice())
+    }
+
+    fn get_entry_dn(&self, _entry: &Entry<impl EntryId>) -> Result<DN, LdapError> {
+        todo!()
     }
 }
 
@@ -135,7 +177,10 @@ mod tests {
             dn::{Rdn, DN},
             entry::{Entry, EntryBuilder, EntryId},
         },
-        service::{entry::EntryService, schema::SchemaService},
+        service::{
+            entry::{EntryService, FindDnResult},
+            schema::SchemaService,
+        },
     };
 
     use super::EntryServiceImpl;
@@ -216,14 +261,16 @@ mod tests {
         let entry_service = EntryServiceImpl::new(&MockSchemaService {}, &entry_repo);
 
         let grandchild_dn = DN::new(vec![
-            Rdn::from(("cn-oid".into(), "Grandchild".into())),
-            Rdn::from(("ou-oid".into(), "parent".into())),
-            Rdn::from(("dc-oid".into(), "com".into())),
+            Rdn::from(("cn-oid", "Grandchild")),
+            Rdn::from(("ou-oid", "parent")),
+            Rdn::from(("dc-oid", "com")),
         ]);
 
         let res = entry_service.find_by_dn(&grandchild_dn).unwrap();
-        assert!(res.is_some());
-        let entry = res.unwrap();
+        assert!(res.is_found());
+        let FindDnResult::Found(entry) = res else {
+            panic!("entry was not found")
+        };
         assert_eq!(entry.get_id(), grandchild.get_id())
     }
 }

@@ -131,7 +131,7 @@ impl<'a, R: SchemaRepo> SchemaServiceImpl<'a, R> {
     }
 
     fn create_normalised_rdn(&self, rdn_str: &str) -> Result<Rdn, String> {
-        let mut rdn = Vec::new();
+        let mut rdn: Vec<(Oid, String)> = Vec::new();
         for att_val in rdn_str.split('+') {
             let (att, val) = att_val.split_once('=').ok_or(rdn_str)?;
             let oid = self
@@ -226,8 +226,6 @@ impl<'a, R: SchemaRepo> SchemaService for SchemaServiceImpl<'a, R> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use crate::{
         db::InMemSchemaDb,
         entity::entry::Entry,
@@ -267,12 +265,8 @@ mod tests {
             .build();
 
         let schema_db = InMemSchemaDb::new(
-            HashMap::from([(p_oid.clone(), person_class)]),
-            HashMap::from([
-                (cn_oid, cn_attr),
-                (sn_oid, sn_attr),
-                (upw_oid, user_pw_attr),
-            ]),
+            [person_class].into_iter(),
+            [cn_attr, sn_attr, user_pw_attr].into_iter(),
         );
 
         let schema_service = SchemaServiceImpl {

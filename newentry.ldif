@@ -1,5 +1,4 @@
 dn: cn=Dexter McClary,dc=georgiboy,dc=dev
 objectClass: person
-cn: Dexter McClary
 commonName: Dexter
 sn: McClary

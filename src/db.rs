@@ -13,8 +13,11 @@ use bytes::Bytes;
 use rand::prelude::*;
 use rasn::types::ObjectIdentifier;
 
-use crate::entity::entry::{Entry, EntryId};
 use crate::entity::schema::{Attribute, ObjectClass, Oid};
+use crate::{
+    entity::entry::{Entry, EntryId},
+    errors::LdapError,
+};
 
 const ROOT_ID_U64: u64 = 0;
 
@@ -43,9 +46,10 @@ impl EntryId for String {
 pub trait EntryRepository<ID: EntryId> {
     fn get_root_entry(&self) -> Entry<ID>;
     fn get_by_id(&self, id: &ID) -> Option<Entry<ID>>;
-    fn save(&mut self, entry: Entry<ID>) -> Entry<ID>;
+    fn save(&self, entry: Entry<ID>) -> Result<Entry<ID>, LdapError>;
 }
 
+#[derive(Debug)]
 pub struct InMemLdapDb<ID: EntryId> {
     entries: HashMap<ID, Entry<ID>>,
 }
@@ -67,14 +71,25 @@ impl<ID: EntryId> InMemLdapDb<ID> {
 }
 
 impl<ID: EntryId> EntryRepository<ID> for Arc<Mutex<InMemLdapDb<ID>>> {
-    fn save(&mut self, mut entry: Entry<ID>) -> Entry<ID> {
+    fn save(&self, mut entry: Entry<ID>) -> Result<Entry<ID>, LdapError> {
         let id = entry.get_id().unwrap_or_else(|| {
             let id = ID::new_random_id();
             entry.set_id(&id);
             id
         });
 
-        self.lock().unwrap().entries.insert(id, entry).unwrap()
+        let res = self
+            .lock()
+            .ok()
+            .ok_or(LdapError::UnknownError(
+                "Could not insert entry into has table".to_string(),
+            ))?
+            .entries
+            .insert(id, entry.clone());
+
+        dbg!(self);
+
+        Ok(res.unwrap_or(entry))
     }
 
     fn get_by_id(&self, id: &ID) -> Option<Entry<ID>> {

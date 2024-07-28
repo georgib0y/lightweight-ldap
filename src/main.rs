@@ -24,17 +24,18 @@ mod service;
 fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:8000")?;
 
-    let (stream, _) = listener.accept()?;
-
     let entry_repo = populated_entry_repo();
     let schema_repo = populated_schema_repo();
 
     let schema_service = SchemaServiceImpl::new(&schema_repo);
     let entry_service = EntryServiceImpl::new(&schema_service, &entry_repo);
     let controller = LdapControllerImpl::new(&entry_service);
-    let mut conn = LdapTcpConnection::new(stream, &controller)?;
 
-    conn.run()
+    loop {
+        let (stream, _) = listener.accept()?;
+        let mut conn = LdapTcpConnection::new(stream, &controller)?;
+        conn.run()?;
+    }
 }
 
 pub fn populated_entry_repo() -> Arc<Mutex<InMemLdapDb<u64>>> {
